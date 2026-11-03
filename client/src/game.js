@@ -25,7 +25,7 @@ export class Game {
     this.boss=null;this.bossSpawned=false;this.shipArrived=false;this.shipArrivedAt=0;this.returnAt=null;this.returnEarly=false;this.shipDoorOpen=false;this.playerBoarded=false;
     this.deposited={crystal:0,nitra:0};this.teamNitra=0;this.totalKills=0;this.damageTaken=0;this.interactTarget=null;this.depositAccumulator=0;this.reloadTimer=0;this.weaponCooldown=0;this.weaponHeat=0;this.flameHeat=0;this.overheatedUntil=0;this.lightCooldown=0;this.actionCooldown={};
     this.keys=new Set();this.mouseDown=false;this.eHeld=false;this.pointerActive=false;this.grapple=null;this.jumpVelocity=0;this.playerSpeed=6.6;this.cameraYaw=0;this.cameraPitch=.22;this.cameraDistance=5.6;this.cameraLookAt=new THREE.Vector3();this.cameraPosition=new THREE.Vector3();this.elapsedAccumulator=0;
-    this.previousMouseDown=false;this.activeSupplyPack=null;this.supplyHold=0;this.ifgFields=[];this.lures=[];this.introWake=false;
+    this.previousMouseDown=false;this.activeSupplyPack=null;this.supplyHold=0;this.ifgFields=[];this.lures=[];this.ziplineRide=null;this.platforms=[];this.introWake=false;this.previewPlan=null;
     this.player=this.createPlayer('gunner');this.player.position.set(0,0,-6);this.player.group.position.copy(this.player.position);this.scene.add(this.player.group);this.world.markVisited?.(null);
     this.bindInput();this.bindHUD();window.addEventListener('resize',()=>this.resize());
     this.hud.setStage('base');this.hud.setClass('gunner');
@@ -96,35 +96,66 @@ export class Game {
   enterMission(){
     const seed=(Date.now()^Math.floor(Math.random()*0xffffffff))>>>0;
     this.missionSeed=seed;const worldRng=seeded(seed);this.world.rng=worldRng;this.rng=seeded((seed^0x85ebca6b)>>>0);
-    const waveRng=seeded((seed^0x9e3779b9)>>>0);this.wavePlan=pick(waveRng,WAVE_PLANS);
+    const waveRng=seeded((seed^0x9e3779b9)>>>0);this.wavePlan=this.previewPlan||pick(waveRng,WAVE_PLANS);this.previewPlan=this.wavePlan;
     this.world.generateCave(seed,this.wavePlan.id);
     this.stage='cave';this.elapsed=0;this.waveIndex=0;this.overtimeIndex=0;this.nextWaveAt=WAVE_TIMES[0];this.activeCap=12;
-    this.clearTransient();this.enemies=[];this.spawnQueue=[];this.projectiles=[];this.throwables=[];this.telegraphs=[];this.acidPatches=[];this.sentries=[];this.platforms=[];this.ziplines=[];this.flareLights=[];this.shieldBubbles=[];this.satchels=[];this.ifgFields=[];this.lures=[];this.boss=null;this.bossSpawned=false;
+    this.clearTransient();this.enemies=[];this.spawnQueue=[];this.projectiles=[];this.throwables=[];this.telegraphs=[];this.acidPatches=[];this.sentries=[];this.platforms=[];this.ziplines=[];this.flareLights=[];this.shieldBubbles=[];this.satchels=[];this.ifgFields=[];this.lures=[];this.ziplineRide=null;this.boss=null;this.bossSpawned=false;
     this.shipArrived=false;this.shipArrivedAt=0;this.returnAt=null;this.returnEarly=false;this.shipDoorOpen=false;this.playerBoarded=false;
     this.deposited={crystal:0,nitra:0};this.teamNitra=0;this.totalKills=0;this.damageTaken=0;this.depositAccumulator=0;this.weaponCooldown=0;this.weaponHeat=0;this.flameHeat=0;this.overheatedUntil=0;this.waveSpawned=false;this.toastBossSeen=false;
     this.scene.remove(this.player.group);this.player=this.createPlayer(this.player.classId);this.player.group.position.copy(this.world.startRoom?new THREE.Vector3(this.world.startRoom.x,0,this.world.startRoom.z):new THREE.Vector3());this.player.position.copy(this.player.group.position);this.player.yaw=0;this.scene.add(this.player.group);this.currentRoom=this.world.startRoom;this.world.markVisited(this.currentRoom);
+    if(this.world.bossRoom){this.boss=new Enemy('boss',this.world.bossRoom,new THREE.Vector3(this.world.bossRoom.x,0,this.world.bossRoom.z),this.scene,this.rng);this.boss.active=false;this.boss.group.visible=false;this.enemies.push(this.boss);}
     this.hud.setStage('cave');this.hud.toast(`随机地图已生成 · 波次编排 ${this.wavePlan.id}「${this.wavePlan.name}」`);
     this.requestPointer();
   }
 
+  startLaunchCinematic(ship){
+    const target=ship.position.clone().add(new THREE.Vector3(0,2,0));
+    this.cinematic={type:'launch',time:0,duration:3.8,ship,fromCamera:this.camera.position.clone(),target,switched:false};
+    this.stage='cinematic';this.mouseDown=false;this.hud.setCinematic(true,0,0,'舱门闭锁','飞船正在准备发射','LAUNCH SEQUENCE');
+  }
+
+  startReturnCinematic(reason){
+    const ship=this.world.ship,target=ship?ship.position.clone().add(new THREE.Vector3(0,2,0)):this.player.position.clone().add(new THREE.Vector3(0,2,0));
+    this.cinematic={type:'return',time:0,duration:4.1,ship,fromCamera:this.camera.position.clone(),target,switched:false,reason,result:{deposited:this.deposited.crystal,kills:this.totalKills,plan:this.wavePlan?`${this.wavePlan.id} · ${this.wavePlan.name}`:'--',time:this.elapsed}};
+    this.stage='cinematic';this.mouseDown=false;this.hud.setCinematic(true,0,0,'全员登舱','撤离船正在离开洞穴','EXTRACTION COMPLETE');
+  }
+
+  updateCinematic(dt){
+    const c=this.cinematic;if(!c)return;c.time+=dt;const t=c.time;
+    if(c.type==='launch'){
+      if(c.ship?.parent){c.ship.position.y=Math.sin(Math.min(t/2,1)*Math.PI)*.48;c.ship.rotation.y=Math.sin(t*.8)*.04;}
+      if(t<1.85){const u=clamp(t/1.85,0,1),ship=c.ship?.position||new THREE.Vector3(0,0,19),close=ship.clone().add(new THREE.Vector3(7,3.6,9)),look=ship.clone().add(new THREE.Vector3(0,1.8,1));this.camera.position.copy(c.fromCamera).lerp(close,1-Math.pow(1-u,3));this.camera.lookAt(look);this.hud.setCinematic(true,clamp((t-1.15)/.7,0,1),u,'舱门闭锁','地面组已就位 · 引擎点火','LAUNCH SEQUENCE');}
+      if(t>=1.9&&!c.switched){c.switched=true;this.hud.setCinematic(true,1,.55,'','穿越矿层 · 空降准备','DROP TRANSIT');this.enterMission();this.stage='cinematic';c.target=this.player.position.clone().add(new THREE.Vector3(0,1.6,0));c.toCamera=this.player.position.clone().add(new THREE.Vector3(.8,3.6,6.5));}
+      if(c.switched){const u=clamp((t-2)/1.8,0,1);this.camera.position.lerp(c.toCamera,1-Math.pow(1-u,3));this.camera.lookAt(c.target);this.hud.setCinematic(true,1-u,.55+u*.45,u<.55?'':'抵达战区','',u<.55?'DROP TRANSIT':'INSERTION COMPLETE');if(t>=c.duration){this.cinematic=null;this.stage='cave';this.hud.setCinematic(false,0,1);this.hud.setStage('cave');this.requestPointer();}}
+      return;
+    }
+    if(c.type==='return'){
+      if(t<1.75&&c.ship?.parent){c.ship.position.y=Math.min(5,t*1.9);c.ship.rotation.y+=dt*.1;}
+      if(t<1.9){const u=clamp(t/1.9,0,1),ship=c.ship?.position||c.target,close=ship.clone().add(new THREE.Vector3(7,3.6,9)),look=ship.clone().add(new THREE.Vector3(0,1.8,0));this.camera.position.copy(c.fromCamera).lerp(close,1-Math.pow(1-u,3));this.camera.lookAt(look);this.hud.setCinematic(true,clamp((t-1.2)/.7,0,1),u,'全员登舱','舱门闭锁 · 飞船离地','RETURN TRANSIT');}
+      if(t>=1.95&&!c.switched){c.switched=true;this.hud.setCinematic(true,1,.55,'','返回基地 · 准备接管','BASE APPROACH');this.returnToBase();this.stage='cinematic';c.arrivalShip=this.world.interactables.find(item=>item.type==='ship')?.mesh;if(c.arrivalShip){c.arrivalShip.position.y=12;c.arrivalCamera=c.arrivalShip.position.clone().add(new THREE.Vector3(8,7,12));c.arrivalLook=c.arrivalShip.position.clone().add(new THREE.Vector3(0,2,0));}c.target=this.player.position.clone().add(new THREE.Vector3(0,1.5,0));c.toCamera=this.player.position.clone().add(new THREE.Vector3(.8,3.6,6.5));}
+      if(c.switched){const u=clamp((t-2.1)/1.9,0,1),approach=clamp(u/.35,0,1);if(c.arrivalShip){c.arrivalShip.position.y=12*(1-u);c.arrivalShip.rotation.y=Math.sin(u*Math.PI)*.08;}const blend=1-Math.pow(1-approach,3);this.camera.position.copy(c.arrivalCamera||c.toCamera).lerp(c.toCamera,blend);this.camera.lookAt((c.arrivalLook||c.target).clone().lerp(c.target,blend));this.hud.setCinematic(true,1-u,.55+u*.45,u<.35?'基地接收返航舱':'落地完成',u<.35?'接近停机坪 · 减速着陆':'基地回收完成 · 控制权已交还',u<.35?'BASE APPROACH':'TOUCHDOWN');if(t>=c.duration){this.cinematic=null;this.stage='base';this.hud.setCinematic(false,0,1);this.hud.setStage('base');const r=c.result||{};this.hud.toast(`任务成功 · 晶矿 ${r.deposited||200}/200 · 击杀 ${r.kills||0}`,'success');this.requestPointer();}}
+    }
+  }
+
   returnToBase(){
     this.scene.remove(this.player.group);this.clearTransient();this.enemies=[];this.spawnQueue=[];this.world.buildBase();this.stage='base';this.accepted=false;this.started=true;this.elapsed=0;this.player=this.createPlayer(this.player.classId);this.player.group.position.set(0,0,-6);this.player.position.set(0,0,-6);this.scene.add(this.player.group);
-    this.shipArrived=false;this.returnAt=null;this.boss=null;this.wavePlan=null;this.currentRoom=null;this.hud.setStage('base');this.hud.setPauseVisible(false);this.hud.toast('返回基地 · 本局资源已清空');this.requestPointer();
+    this.shipArrived=false;this.returnAt=null;this.boss=null;this.wavePlan=null;this.previewPlan=null;this.currentRoom=null;this.hud.setStage('base');this.hud.setPauseVisible(false);this.hud.toast('返回基地 · 本局资源已清空');this.requestPointer();
   }
 
   selectSlot(slot){if(!this.started||this.stage==='result')return;this.player.selectedSlot=slot;this.weaponCooldown=0;this.hud.toast(CLASS_DATA[this.player.classId].loadout[slot].name);}
 
   startInteract(){
+    if(this.ziplineRide){this.ziplineRide=null;this.jumpVelocity=2;this.endInteract();this.hud.toast('已离开滑索');return;}
     this.eHeld=true;
     if(this.stage==='base'){
       const aim=this.getAimDirection();const item=this.world.nearestInteractable(this.player.position,aim);
       if(!item){this.hud.toast('靠近并对准设备后按 E');return;}
       if(item.type==='class'){this.changeClass(item.id);return;}
-      if(item.type==='mission'){this.accepted=true;this.hud.toast('远征任务已接取 · 走入飞船出发');this.hud.update(this);return;}
+      if(item.type==='mission'){if(!this.previewPlan)this.previewPlan=pick(this.rng,WAVE_PLANS);this.accepted=true;this.hud.toast('远征任务已接取 · 走入飞船出发');this.hud.update(this);return;}
       if(item.type==='supply'){this.restoreLoadout();this.hud.toast('整备完成 · 装备已补满');return;}
       if(item.type==='ship'){
         if(!this.accepted){this.hud.toast('请先在简报台接取任务');return;}
-        this.enterMission();return;
+        this.startLaunchCinematic(item.mesh);return;
       }
       if(item.type==='target'){this.hud.toast('训练靶命中 · 不消耗弹药');return;}
     }
@@ -132,6 +163,7 @@ export class Game {
       const item=this.world.nearestInteractable(this.player.position,this.getAimDirection());
       if(item?.type==='supplyPack'){this.activeSupplyPack=item;this.supplyHold=0;this.hud.setPrompt('长按 E 领取补给',true);return;}
       if(item?.type==='axe'){const max=CLASS_DATA[this.player.classId].grenade.max;if(this.player.grenades>=max){this.hud.toast('冲击斧携带量已满');return;}this.player.grenades++;item.used=true;this.world.group.remove(item.mesh);this.world.interactables=this.world.interactables.filter(x=>x!==item);this.hud.toast('冲击斧已回收');return;}
+      if(item?.type==='zipline'){this.ziplineRide={line:item.line,t:item.endpoint===0?0:1,direction:item.endpoint===0?1:-1};this.eHeld=false;this.hud.toast('已乘上滑索 · Space 或 E 可离开');return;}
       if(item?.type==='robot'&&this.player.cargo.crystal+this.player.cargo.nitra===0){this.hud.toast('背包里没有可交存的矿物');return;}
     }
   }
@@ -157,21 +189,33 @@ export class Game {
   updatePlayer(dt){
     const p=this.player;
     if(this.stage==='base'||this.stage==='cave'||this.stage==='returning'||this.stage==='boarding'){
+      if(this.ziplineRide){this.updateZiplineRide(dt);p.group.position.set(p.position.x,p.position.y,p.position.z);if(this.stage!=='base')this.currentRoom=this.world.updateCurrentRoom(p.position);}
+      else{
       let forward=(this.keys.has('KeyW')?1:0)-(this.keys.has('KeyS')?1:0),side=(this.keys.has('KeyD')?1:0)-(this.keys.has('KeyA')?1:0);
       const len=Math.hypot(forward,side);if(len>0){forward/=len;side/=len;}
       const f=new THREE.Vector3(Math.sin(this.cameraYaw),0,-Math.cos(this.cameraYaw));const r=new THREE.Vector3(Math.cos(this.cameraYaw),0,Math.sin(this.cameraYaw));
       const speed=(this.keys.has('ShiftLeft')?9.5:6.6);let dx=(f.x*forward+r.x*side)*speed*dt,dz=(f.z*forward+r.z*side)*speed*dt;
-      if(this.grapple){this.grapple.t+=dt;const t=clamp(this.grapple.t/this.grapple.duration,0,1);const ease=1-Math.pow(1-t,3);const pos=this.grapple.from.clone().lerp(this.grapple.to,ease);p.position.x=pos.x;p.position.z=pos.z;if(t>=1)this.grapple=null;}
-      else if(len){const candidate=new THREE.Vector3(p.position.x+dx,0,p.position.z+dz);if(this.world.canMove(candidate,.42,2.1)){p.position.x=candidate.x;p.position.z=candidate.z;}else{const xOnly=new THREE.Vector3(p.position.x+dx,0,p.position.z);if(this.world.canMove(xOnly,.42,2.1))p.position.x=xOnly.x;const zOnly=new THREE.Vector3(p.position.x,0,p.position.z+dz);if(this.world.canMove(zOnly,.42,2.1))p.position.z=zOnly.z;}}
-      if(this.jumpVelocity>0||p.position.y>0){this.jumpVelocity-=20*dt;p.position.y=Math.max(0,p.position.y+this.jumpVelocity*dt);if(p.position.y===0)this.jumpVelocity=0;}
+      if(this.grapple){this.grapple.t+=dt;const t=clamp(this.grapple.t/this.grapple.duration,0,1);const ease=1-Math.pow(1-t,3);const pos=this.grapple.from.clone().lerp(this.grapple.to,ease);p.position.x=pos.x;p.position.z=pos.z;if(this.grapple.line){this.grapple.line.geometry.dispose();this.grapple.line.geometry=new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(p.position.x,1.25,p.position.z),this.grapple.to.clone().setY(2)]);}if(t>=1){if(this.grapple.line)this.scene.remove(this.grapple.line);this.grapple=null;}}
+      else if(len){const candidate=new THREE.Vector3(p.position.x+dx,p.position.y,p.position.z+dz);if(this.world.canMove(candidate,.42,2.1)){p.position.x=candidate.x;p.position.z=candidate.z;}else{const xOnly=new THREE.Vector3(p.position.x+dx,p.position.y,p.position.z);if(this.world.canMove(xOnly,.42,2.1))p.position.x=xOnly.x;const zOnly=new THREE.Vector3(p.position.x,p.position.y,p.position.z+dz);if(this.world.canMove(zOnly,.42,2.1))p.position.z=zOnly.z;}}
+      const ground=this.platformGroundAt(p.position.x,p.position.z,p.position.y);
+      if(this.jumpVelocity>0||p.position.y>ground){this.jumpVelocity-=20*dt;p.position.y=Math.max(ground,p.position.y+this.jumpVelocity*dt);if(p.position.y<=ground+.001)this.jumpVelocity=0;}else p.position.y=ground;
       p.group.position.set(p.position.x,p.position.y,p.position.z);
       const aim=this.getAimDirection();p.group.rotation.y=Math.atan2(aim.x,aim.z);
       if(this.stage!=='base'){this.currentRoom=this.world.updateCurrentRoom(p.position);}
+      }
     }
     if(this.stage==='cave'||this.stage==='returning'||this.stage==='boarding'){
       if(this.elapsed-p.lastDamage>6&&p.shield<50)p.shield=Math.min(50,p.shield+10*dt);
       for(const bubble of this.shieldBubbles){if(bubble.life>0&&Math.hypot(p.position.x-bubble.mesh.position.x,p.position.z-bubble.mesh.position.z)<bubble.radius)p.shield=Math.min(50,p.shield+25*dt);}
     }
+  }
+
+  platformGroundAt(x,z,currentY){
+    let top=0;for(const p of this.platforms){if(p.life<=0)continue;if(Math.abs(x-p.x)<=p.width/2&&Math.abs(z-p.z)<=p.depth/2&&currentY>=p.top-.38&&currentY<=p.top+1.1)top=Math.max(top,p.top);}return top;
+  }
+
+  updateZiplineRide(dt){
+    const ride=this.ziplineRide;if(!ride)return;const line=ride.line,a=line.start,b=line.end,len=Math.max(.1,a.distanceTo(b));ride.t=clamp(ride.t+ride.direction*(4*dt/len),0,1);this.player.position.lerpVectors(a,b,ride.t);this.player.position.y=Math.max(.4,this.player.position.y);this.player.group.rotation.y=Math.atan2(b.x-a.x,b.z-a.z);if(ride.t===0||ride.t===1){this.ziplineRide=null;this.hud.toast('已到达滑索终点');}
   }
 
   updateCamera(dt){
@@ -190,7 +234,8 @@ export class Game {
     this.hud.setPrompt('',false);this.hud.setHold('',0,false);
     if(this.stage==='base'){
       const item=this.world.nearestInteractable(this.player.position,this.getAimDirection());
-      if(item){const label=item.type==='class'?`选择${item.name}`:item.type==='mission'?(this.accepted?'任务已接取':'接取远征任务'):item.type==='supply'?'免费整备':item.type==='ship'?(this.accepted?'进入飞船出发':'请先接取任务'):'训练靶';this.hud.setPrompt(label,true);}
+      if(item){const label=item.type==='class'?`选择${item.name}`:item.type==='mission'?(this.accepted?'任务已接取':'接取远征任务'):item.type==='supply'?'免费整备':item.type==='ship'?(this.accepted?'进入飞船出发':'请先接取任务'):'训练靶';this.hud.setPrompt(label,true);if(item.type==='mission'){if(!this.previewPlan)this.previewPlan=pick(this.rng,WAVE_PLANS);const p=new THREE.Vector3(item.position.x,3.4,item.position.z).project(this.camera);this.hud.setMissionPreview(true,{x:(p.x*.5+.5)*innerWidth,y:(-p.y*.5+.5)*innerHeight},this.accepted,this.previewPlan,this.world.resourceTotals);}else this.hud.setMissionPreview(false);}
+      else this.hud.setMissionPreview(false);
       return;
     }
     if(this.stage!=='cave'&&this.stage!=='returning'&&this.stage!=='boarding')return;
@@ -211,6 +256,8 @@ export class Game {
         this.hud.setHold('正在交存',(this.elapsed%0.6)/0.6,true);
       }
     }
+    if(item?.type==='zipline')this.hud.setPrompt('乘坐滑索',true,'E');
+    if(item?.type==='axe')this.hud.setPrompt('回收冲击斧',true,'E');
     if(this.shipArrived&&this.world.ship){
       const d=Math.hypot(this.player.position.x-this.world.ship.position.x,this.player.position.z-this.world.ship.position.z);
       if(d<7)this.hud.setPrompt('进入舱内 · 自动登舱',true,'自动');
@@ -227,8 +274,11 @@ export class Game {
     const gear=CLASS_DATA[this.player.classId].loadout[this.player.selectedSlot];
     if(this.stage==='base'&&(gear.tool||gear.mining))return;
     if(gear.tool==='drill'){
-      const fuel=this.player.fuelBySlot[3]??gear.fuel;if(fuel<=0)return;
-      this.player.fuelBySlot[3]=Math.max(0,fuel-(gear.fuelRate||10)*dt);this.damageAimedCell((gear.rate||20)*dt,gear.range);return;
+      if(this.weaponCooldown>0)return;
+      const tick=.16,fuel=this.player.fuelBySlot[3]??gear.fuel;if(fuel<=0){this.hud.toast('动力钻燃料耗尽');return;}
+      this.weaponCooldown=tick;this.player.fuelBySlot[3]=Math.max(0,fuel-(gear.fuelRate||10)*tick);
+      this.damageAimedCell((gear.terrain||20)*tick,gear.range);
+      return;
     }
     if(gear.mining){if(this.weaponCooldown<=0){this.weaponCooldown=gear.rate;this.damageAimedCell(gear.terrain,gear.range);}return;}
     if(['grapple','zipline','shield','flaregun','platform','sentry','satchel'].includes(gear.tool)){
@@ -261,7 +311,7 @@ export class Game {
       const dir=this.getAimDirection();if(gear.spread){dir.x+=(Math.random()-.5)*gear.spread;dir.y+=(Math.random()-.5)*gear.spread;dir.z+=(Math.random()-.5)*gear.spread;dir.normalize();}dirs.push(dir);
     }
     for(const dir of dirs){this.raycaster.set(this.camera.position,dir);this.raycaster.far=gear.range||55;
-      const targets=[...this.world.rayTargets,...this.enemies.filter(e=>e.alive).flatMap(e=>e.parts)];
+      const targets=[...this.world.rayTargets,...this.enemies.filter(e=>e.alive&&e.active!==false&&e.group.visible).flatMap(e=>e.parts.filter(p=>p.visible))];
       const hit=this.raycaster.intersectObjects(targets,false)[0];this.player.stats.shots++;
       if(!hit)continue;const entity=hit.object.userData.entity,hitData=hit.object.userData.hit;
       if(entity?.kind==='ore'){entity.hp-=gear.terrain||gear.damage;this.player.stats.hits++;this.hud.hit(false);if(entity.hp<=0){this.world.cellDestroyed(entity);this.player.stats.terrainBroken++;this.damageText(hit.point,`+${entity.value} 矿物`,'ore');}}
@@ -297,7 +347,7 @@ export class Game {
 
   aimHit(maxDistance=40){
     const direction=this.getAimDirection();this.raycaster.set(this.camera.position,direction);this.raycaster.far=maxDistance;
-    const targets=[...this.world.rayTargets.filter(m=>m.visible&&m.parent),...this.enemies.filter(e=>e.alive).flatMap(e=>e.parts)];
+    const targets=[...this.world.rayTargets.filter(m=>m.visible&&m.parent),...this.enemies.filter(e=>e.alive&&e.active!==false&&e.group.visible).flatMap(e=>e.parts.filter(p=>p.visible))];
     const hit=this.raycaster.intersectObjects(targets,false)[0];
     return hit?{point:hit.point.clone(),object:hit.object,distance:hit.distance,entity:hit.object.userData.entity,hitData:hit.object.userData.hit}:{point:this.camera.position.clone().addScaledVector(direction,maxDistance),object:null,distance:maxDistance,entity:null,hitData:null};
   }
@@ -311,12 +361,16 @@ export class Game {
       if(distance>gear.range||distance<2){this.hud.toast('抓钩目标距离不合适');return;}
       const to=aim.point.clone();to.y=0;const dir=to.clone().sub(this.player.position).normalize();to.addScaledVector(dir,-1.2);
       if(!this.world.canMove(to,.45,2.1)){this.hud.toast('落点空间不足');return;}
-      this.grapple={from:this.player.position.clone(),to,t:0,duration:clamp(distance/22,.38,.9)};this.actionCooldown.grapple=this.elapsed+gear.cooldown;this.player.chargesBySlot[slot]=Math.max(0,available-1);this.hud.toast('抓钩发射');return;
+      const line=new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(this.player.position.x,1.25,this.player.position.z),aim.point.clone().setY(2)]),new THREE.LineBasicMaterial({color:0x81c9e4}));this.scene.add(line);
+      this.grapple={from:this.player.position.clone(),to,t:0,duration:clamp(distance/22,.38,.9),line};this.actionCooldown.grapple=this.elapsed+gear.cooldown;this.player.chargesBySlot[slot]=Math.max(0,available-1);this.hud.toast('抓钩发射');return;
     }
     if(gear.tool==='zipline'){
       if(available<=0){this.hud.toast('滑索弹已耗尽');return;}const distance=Math.hypot(aim.point.x-this.player.position.x,aim.point.z-this.player.position.z);
       if(distance<4||distance>30||aim.entity?.kind==='ore'||aim.entity?.kind==='rock'){this.hud.toast('无法在该位置架设滑索');return;}
-      const line=new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(this.player.position.x,.35,this.player.position.z),aim.point.clone().setY(Math.max(1,aim.point.y))]),new THREE.LineBasicMaterial({color:0xe8b34f}));this.scene.add(line);this.ziplines.push({line,life:Infinity});this.player.chargesBySlot[slot]--;this.hud.toast('滑索已架设 · 本局有效');return;
+      const start=new THREE.Vector3(this.player.position.x,.7,this.player.position.z),end=aim.point.clone().setY(Math.max(1.2,aim.point.y));
+      const line=new THREE.Line(new THREE.BufferGeometry().setFromPoints([start,end]),new THREE.LineBasicMaterial({color:0xe8b34f}));this.scene.add(line);const zip={line,start,end,life:Infinity};this.ziplines.push(zip);
+      this.world.interactables.push({type:'zipline',name:'乘坐滑索',position:new THREE.Vector3(start.x,0,start.z),line:zip,endpoint:0,range:2.4},{type:'zipline',name:'乘坐滑索',position:new THREE.Vector3(end.x,0,end.z),line:zip,endpoint:1,range:2.4});
+      this.player.chargesBySlot[slot]--;this.hud.toast('滑索已架设 · 靠近端点按 E 乘坐');return;
     }
     if(gear.tool==='shield'){
       if(available<=0){this.hud.toast('护盾充能已耗尽');return;}const mesh=new THREE.Mesh(new THREE.SphereGeometry(3,20,14),new THREE.MeshStandardMaterial({color:0x53c8d0,transparent:true,opacity:.12,emissive:0x14585c,emissiveIntensity:.4,side:THREE.DoubleSide,depthWrite:false}));mesh.position.copy(this.player.position);mesh.position.y=1.5;this.scene.add(mesh);const light=new THREE.PointLight(0x4cbfcb,12,8,2);light.position.copy(mesh.position);this.scene.add(light);this.shieldBubbles.push({mesh,light,position:mesh.position,radius:3,life:6});this.player.chargesBySlot[slot]--;this.hud.toast('护盾发生器已启动');return;
@@ -326,7 +380,7 @@ export class Game {
     }
     if(gear.tool==='platform'){
       if(available<=0){this.hud.toast('平台弹药已耗尽');return;}const point=aim.point.clone();if(!aim.object){const dir=this.getAimDirection();point.copy(this.player.position).addScaledVector(dir,5);point.y=2.2;}
-      const pos={x:point.x,y:Math.max(.8,point.y),z:point.z};this.world.addBox(this.world.group,pos,{x:3,y:.48,z:3},new THREE.MeshStandardMaterial({color:0x806f5e,roughness:.95}),{solid:true,camera:true});this.player.chargesBySlot[slot]--;this.hud.toast('平台已部署');return;
+      const pos={x:point.x,y:Math.min(1.0,Math.max(.8,point.y)),z:point.z},width=3,depth=3,thickness=.48;this.world.addBox(this.world.group,pos,{x:width,y:thickness,z:depth},new THREE.MeshStandardMaterial({color:0x806f5e,roughness:.95}),{solid:true,camera:true});this.platforms.push({x:pos.x,y:pos.y,z:pos.z,width,depth,top:pos.y+thickness/2,life:Infinity});this.player.chargesBySlot[slot]--;this.hud.toast('平台已部署 · Space 可跳上平台');return;
     }
     if(gear.tool==='sentry'){
       if(this.sentries.some(t=>t.life>0)){this.hud.toast('自动哨戒机枪已部署');return;}if(available<=0){this.hud.toast('哨戒机枪部署次数已用尽');return;}
@@ -384,10 +438,10 @@ export class Game {
     item.used=true;this.world.group.remove(item.mesh);this.world.interactables=this.world.interactables.filter(x=>x!==item);this.hud.toast('补给领取完成');
   }
 
-  jump(){if(this.stage==='base'||this.stage==='cave'||this.stage==='returning'||this.stage==='boarding'){if(this.player.position.y<=0)this.jumpVelocity=7.2;}}
+  jump(){if(this.ziplineRide){this.ziplineRide=null;this.jumpVelocity=3;return;}if(this.stage==='base'||this.stage==='cave'||this.stage==='returning'||this.stage==='boarding'){if(this.player.position.y<=this.platformGroundAt(this.player.position.x,this.player.position.z,this.player.position.y)+.01)this.jumpVelocity=7.2;}}
 
   radialDamage(position,radius,peak){
-    for(const enemy of this.enemies){if(!enemy.alive)continue;const d=Math.hypot(enemy.group.position.x-position.x,enemy.group.position.z-position.z);if(d>=radius)continue;if(!this.hasLineOfSight(position,enemy.group.position))continue;const damage=Math.floor(peak*Math.max(0,1-d/radius));if(damage>0)this.hitEnemy(enemy,damage,'body',enemy.group.position.clone().add(new THREE.Vector3(0,1,0)));}
+    for(const enemy of this.enemies){if(!enemy.alive||enemy.active===false||!enemy.group.visible)continue;const d=Math.hypot(enemy.group.position.x-position.x,enemy.group.position.z-position.z);if(d>=radius)continue;if(!this.hasLineOfSight(position,enemy.group.position))continue;const damage=Math.floor(peak*Math.max(0,1-d/radius));if(damage>0)this.hitEnemy(enemy,damage,'body',enemy.group.position.clone().add(new THREE.Vector3(0,1,0)));}
     for(const cell of [...this.world.cells,...this.world.oreCells]){if(cell.removed)continue;const d=Math.hypot(cell.worldPosition.x-position.x,cell.worldPosition.z-position.z);if(d<radius){cell.hp-=peak*Math.max(0,1-d/radius);if(cell.hp<=0)this.world.cellDestroyed(cell);}}
   }
 
@@ -409,8 +463,10 @@ export class Game {
   enemySlowFactor(position){for(const f of this.ifgFields)if(f.life>0&&Math.hypot(position.x-f.position.x,position.z-f.position.z)<f.radius)return .65;return 1;}
   enemyDamageMultiplier(position){for(const f of this.ifgFields)if(f.life>0&&Math.hypot(position.x-f.position.x,position.z-f.position.z)<f.radius)return 1.2;return 1;}
   findLure(position){let target=null,dist=8;for(const l of this.lures)if(l.life>0){const d=Math.hypot(position.x-l.position.x,position.z-l.position.z);if(d<dist){dist=d;target=l;}}return target;}
-  spawnBossAdds(boss){const room=boss.room;for(const type of ['rusher','acid']){if(this.enemies.filter(e=>e.alive).length>=this.activeCap)break;const p=new THREE.Vector3(room.x+randomBetween(this.rng,-5,5),0,room.z+randomBetween(this.rng,-5,5));if(this.world.canMove(p,.5,1.8))this.enemies.push(new Enemy(type,room,p,this.scene,this.rng));}}
+  getEnemyTarget(enemy){return this.findLure(enemy.group.position)?.position||this.player.position;}
+  spawnBossAdds(boss){const room=boss.room;for(const type of ['rusher','acid']){if(this.enemies.filter(e=>e.alive&&e.active!==false).length>=this.activeCap)break;const p=new THREE.Vector3(room.x+randomBetween(this.rng,-5,5),0,room.z+randomBetween(this.rng,-5,5));if(this.world.canMove(p,.5,1.8))this.enemies.push(new Enemy(type,room,p,this.scene,this.rng));}}
   clearTransient(){
+    if(this.grapple?.line)this.scene.remove(this.grapple.line);this.grapple=null;
     for(const e of this.enemies??[])this.scene.remove(e.group);
     for(const list of [this.projectiles,this.throwables])for(const v of list??[])this.scene.remove(v.mesh);
     for(const t of this.telegraphs??[])this.scene.remove(t.mesh);
@@ -428,6 +484,7 @@ export class Game {
   animate(){
     requestAnimationFrame(()=>this.animate());
     const dt=Math.min(this.clock.getDelta(),.05);
+    if(this.cinematic){this.updateCinematic(dt);this.renderer.render(this.scene,this.camera);return;}
     this.update(dt);this.renderer.render(this.scene,this.camera);
   }
 
@@ -438,7 +495,7 @@ export class Game {
 
   updateWaves(dt){
     if(this.stage==='base'||this.stage==='result')return;
-    const alive=this.enemies.filter(e=>e.alive).length;
+    const alive=this.enemies.filter(e=>e.alive&&e.active!==false).length;
     this.activeCap=this.getActiveCap();
     while(this.waveIndex<WAVE_TIMES.length&&this.elapsed>=WAVE_TIMES[this.waveIndex]){
       const index=this.waveIndex++;this.queueWave(index);
@@ -508,14 +565,9 @@ export class Game {
   }
 
   updateBossTrigger(){
-    if(this.stage==='base'||this.bossSpawned||!this.world.bossRoom)return;
+    if(this.stage==='base'||this.stage==='result'||this.stage==='cinematic'||this.bossSpawned||!this.boss)return;
     const inBossRoom=this.currentRoom===this.world.bossRoom;
-    if(inBossRoom||this.elapsed>=390){
-      this.bossSpawned=true;
-      const b=new Enemy('boss',this.world.bossRoom,new THREE.Vector3(this.world.bossRoom.x,0,this.world.bossRoom.z),this.scene,this.rng);
-      this.enemies.push(b);this.boss=b;this.hud.toast('固定 Boss 事件 · 渊脊母虫苏醒','boss');
-      if(inBossRoom)this.world.markVisited(this.world.bossRoom);
-    }
+    if(inBossRoom||this.elapsed>=390){this.bossSpawned=true;this.boss.active=true;this.boss.group.visible=true;this.hud.toast('固定 Boss 事件 · 渊脊母虫苏醒','boss');if(inBossRoom)this.world.markVisited(this.world.bossRoom);}
   }
 
   updateEvac(dt){
@@ -542,6 +594,7 @@ export class Game {
 
   finishMission(success,reason){
     if(this.stage==='result')return;
+    if(success){this.startReturnCinematic(reason);this.spawnQueue=[];return;}
     this.stage='result';this.mouseDown=false;this.eHeld=false;if(document.pointerLockElement)document.exitPointerLock();
     this.hud.el.resultOverlay.hidden=false;this.hud.showResult({success,reason,deposited:this.deposited.crystal,kills:this.totalKills,plan:this.wavePlan?`${this.wavePlan.id} · ${this.wavePlan.name}`:'--',time:this.elapsed});
     this.spawnQueue=[];this.projectiles=[];this.telegraphs.forEach(t=>this.removeTelegraph(t));this.telegraphs=[];this.hud.setStage('result');
@@ -590,7 +643,7 @@ export class Game {
   updateTelegraphs(dt){for(const t of this.telegraphs){if(!t.alive)continue;t.remaining-=dt;const k=1-clamp(t.remaining/t.duration,0,1);t.mesh.scale.setScalar(.55+k*.45);t.mesh.material.opacity=.4+.4*(1-k);if(t.remaining<=0){this.removeTelegraph(t);}}this.telegraphs=this.telegraphs.filter(t=>t.alive);}
   updatePatches(dt){for(const a of this.acidPatches){if(!a.alive)continue;if(a.delay>0){a.delay-=dt;a.mesh.material.opacity=.08+Math.sin(performance.now()*.02)*.05;continue;}if(a.type==='mortar'&&!a.applied){a.applied=true;if(Math.hypot(this.player.position.x-a.position.x,this.player.position.z-a.position.z)<a.radius)this.damagePlayer(a.damage,a.position,'震荡落晶');}a.life-=dt;a.nextTick-=dt;if(a.type==='acid'&&a.nextTick<=0&&Math.hypot(this.player.position.x-a.position.x,this.player.position.z-a.position.z)<a.radius){this.damagePlayer(a.damage,a.position,'酸液灼伤');a.nextTick=1;}a.mesh.material.opacity=Math.max(.04,.22*a.life/2.5);a.ring.material.opacity=Math.max(0,.5*a.life/2.5);if(a.life<=0){a.alive=false;this.scene.remove(a.mesh);this.scene.remove(a.ring);}}this.acidPatches=this.acidPatches.filter(a=>a.alive);}
 
-  updateSentries(dt){for(const t of this.sentries){if(t.life<=0){this.scene.remove(t.group);continue;}t.life-=dt;t.cooldown-=dt;let target=null,best=t.range;for(const e of this.enemies){if(!e.alive)continue;const d=Math.hypot(e.group.position.x-t.group.position.x,e.group.position.z-t.group.position.z);if(d<best&&this.hasLineOfSight(t.group.position,e.group.position)){target=e;best=d;}}if(target){t.group.rotation.y=Math.atan2(target.group.position.x-t.group.position.x,target.group.position.z-t.group.position.z);if(t.cooldown<=0){t.cooldown=.32;this.hitEnemy(target,8,'body',target.group.position.clone().add(new THREE.Vector3(0,1,0)));}}}this.sentries=this.sentries.filter(t=>t.life>0);}
+  updateSentries(dt){for(const t of this.sentries){if(t.life<=0){this.scene.remove(t.group);continue;}t.life-=dt;t.cooldown-=dt;let target=null,best=t.range;for(const e of this.enemies){if(!e.alive||e.active===false||!e.group.visible)continue;const d=Math.hypot(e.group.position.x-t.group.position.x,e.group.position.z-t.group.position.z);if(d<best&&this.hasLineOfSight(t.group.position,e.group.position)){target=e;best=d;}}if(target){t.group.rotation.y=Math.atan2(target.group.position.x-t.group.position.x,target.group.position.z-t.group.position.z);if(t.cooldown<=0){t.cooldown=.32;this.hitEnemy(target,8,'body',target.group.position.clone().add(new THREE.Vector3(0,1,0)));}}}this.sentries=this.sentries.filter(t=>t.life>0);}
   updatePowerups(dt){
     for(const f of this.flareLights){f.life-=dt;if(f.life<=0){this.scene.remove(f.light);this.scene.remove(f.mesh);}}this.flareLights=this.flareLights.filter(f=>f.life>0);
     for(const b of this.shieldBubbles){b.life-=dt;if(b.life<=0){this.scene.remove(b.mesh);this.scene.remove(b.light);}}this.shieldBubbles=this.shieldBubbles.filter(b=>b.life>0);

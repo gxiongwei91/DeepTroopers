@@ -198,7 +198,7 @@ export class ExpeditionWorld {
     const layoutRng = this.rng;
     const {cells,edges,cycles}=makeRngLayout(layoutRng);
     this.graphCycles=cycles;
-    this.rooms=cells.map((cell,i)=>({id:i,gx:cell.gx,gz:cell.gz,x:cell.gx*ROOM_SPACING,z:cell.gz*ROOM_SPACING,width:ROOM_SIZE+randomBetween(layoutRng,-1.5,1.5),depth:ROOM_SIZE+randomBetween(layoutRng,-1.5,1.5),visited:false}));
+    this.rooms=cells.map((cell,i)=>({id:i,gx:cell.gx,gz:cell.gz,x:cell.gx*ROOM_SPACING,z:cell.gz*ROOM_SPACING,width:ROOM_SIZE+randomBetween(layoutRng,-1.5,1.5),depth:ROOM_SIZE+randomBetween(layoutRng,-1.5,1.5),ceilingY:ROOM_HEIGHT,visited:false}));
     this.startRoom=pick(layoutRng,this.rooms);
     const nonStart=this.rooms.filter(r=>r!==this.startRoom);
     this.bossRoom=pick(layoutRng,nonStart);
@@ -475,7 +475,7 @@ export class ExpeditionWorld {
   }
 
   canMove(position,radius=.42,height=2.15){
-    const minY=0,maxY=height;
+    const minY=position.y??0,maxY=minY+height;
     for(const solid of this.solids){
       const m=solid.mesh;if(!m.parent||!m.visible)continue;
       const half=solid.size;const dx=Math.max(Math.abs(position.x-m.position.x)-half.x/2-radius,0);const dz=Math.max(Math.abs(position.z-m.position.z)-half.z/2-radius,0);

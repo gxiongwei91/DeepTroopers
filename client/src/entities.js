@@ -16,6 +16,7 @@ export class Enemy {
     this.data=ENEMIES[kind];this.kind=kind;this.room=room;this.rng=rng;this.callbacks=callbacks;
     this.maxHp=this.data.hp;this.hp=this.data.hp;this.alive=true;this.age=0;this.attackCooldown=randomBetween(rng,.6,1.7);this.windup=0;this.attackType=null;this.recover=0;
     this.stun=0;this.flash=0;this.pathRefresh=0;this.nextRoom=null;this.isBoss=this.data.boss||false;this.isElite=this.data.elite||false;this.weakCloseTimer=0;this.sacCloseTimer=0;
+    this.wallMode='ground';this.wallTimer=0;this.wallCooldown=5+randomBetween(rng,0,4);this.wallSide=rng()<.5?-1:1;this.wallTarget=null;this.dropTarget=null;this.burrowVisible=true;
     this.group=new THREE.Group();this.group.position.set(position.x,0,position.z);scene.add(this.group);
     this.parts=[];this.weakpoints=[];this.telegraph=null;this.sacks=[];this.coreOpen=false;this.weakOpen=this.kind==='rusher';this.chargeVelocity=null;
     this.buildVisual();
@@ -47,6 +48,19 @@ export class Enemy {
       this.body.position.y=.78;this.body.scale.set(.8,.75,1.04);
       addMesh(this.group,new THREE.SphereGeometry(.38,9,8),this.kind==='acid'?glow:eye,{x:0,y:1.05,z:-.56},{x:.82,y:.75,z:.9});
       if(this.kind==='shard')for(let i=0;i<5;i++){const a=i*Math.PI*2/5;addMesh(this.group,new THREE.ConeGeometry(.2,.78,5),main,{x:Math.cos(a)*.52,y:1.15,z:Math.sin(a)*.5},{x:1,y:1,z:1}).rotation.z=Math.cos(a)*.65;}
+    }else if(this.kind==='burrower'){
+      this.body.position.y=.7;this.body.scale.set(.96,.7,1.32);
+      const drill=addMesh(this.group,new THREE.ConeGeometry(.4,.95,6),dark,{x:0,y:.62,z:-1.05},{x:1,y:1,z:1});drill.rotation.x=-Math.PI/2;
+      for(const s of [-1,1]){addMesh(this.group,legGeo,dark,{x:s*.62,y:.34,z:.4},{x:1.25,y:.8,z:1.1});addMesh(this.group,new THREE.SphereGeometry(.14,7,6),eye,{x:s*.28,y:.95,z:-.92},{x:1,y:1,z:.7});}
+      for(let i=0;i<3;i++)addMesh(this.group,new THREE.ConeGeometry(.14,.65,5),main,{x:0,y:.9,z:.35+i*.42},{x:1,y:1,z:1}).rotation.x=Math.PI;
+    }else if(this.kind==='flyer'){
+      this.body.position.y=1.05;this.body.scale.set(.72,.68,1.15);
+      const wingMat=new THREE.MeshStandardMaterial({color:0xb9c4a1,roughness:.35,transparent:true,opacity:.72,side:THREE.DoubleSide});
+      for(const s of [-1,1]){
+        const wing=addMesh(this.group,new THREE.PlaneGeometry(1.7,.8),wingMat,{x:s*.83,y:1.35,z:.1},{x:1,y:1,z:1});wing.rotation.y=s*.32;wing.rotation.z=s*.22;
+        addMesh(this.group,new THREE.SphereGeometry(.28,8,7),glow,{x:s*.43,y:.78,z:.72},{x:.85,y:.7,z:1.1});
+      }
+      addMesh(this.group,new THREE.ConeGeometry(.2,.48,5),dark,{x:0,y:.94,z:-.84},{x:1,y:1,z:1}).rotation.x=-Math.PI/2;
     }else if(this.kind==='rupture'){
       this.body.position.y=1.05;this.body.scale.set(1.3,.95,1.6);
       for(const s of [-1,1]){addMesh(this.group,legGeo,dark,{x:s*.84,y:.55,z:.25},{x:1.35,y:1.2,z:1.15});addMesh(this.group,new THREE.ConeGeometry(.25,.8,5),main,{x:s*.66,y:.65,z:-1.2},{x:1,y:1,z:1}).rotation.x=-Math.PI/2;}
@@ -77,6 +91,7 @@ export class Enemy {
   }
 
   damage(amount,part='body'){
+    if(this.active===false)return {actual:0,crit:false,killed:false};
     if(!this.alive)return {actual:0,crit:false,killed:false};
     let weak=this.weakpoints.find(w=>w.part===part&&w.active&&w.mesh.visible);
     const activeEliteWeak=(this.kind==='rupture'&&this.weakOpen&&part==='sac')||(this.kind==='siege'&&this.weakOpen&&(part==='sacL'||part==='sacR'));
@@ -104,11 +119,13 @@ export class Enemy {
   }
 
   update(dt,game){
-    if(!this.alive)return;
+    if(!this.alive||this.active===false)return;
     this.age+=dt;this.attackCooldown-=dt;this.recover=Math.max(0,this.recover-dt);this.stun=Math.max(0,this.stun-dt);this.flash=Math.max(0,this.flash-dt);
     if(this.weakCloseTimer>0){this.weakCloseTimer-=dt;if(this.weakCloseTimer<=0){this.weakOpen=false;if(this.sacMesh)this.sacMesh.material.emissiveIntensity=.32;for(const sack of this.sacks)sack.material.emissiveIntensity=.32;}}
     if(this.sacCloseTimer>0){this.sacCloseTimer-=dt;if(this.sacCloseTimer<=0){this.phaseSacsOpen=false;for(const sack of this.sacks)sack.material.emissiveIntensity=.32;}}
-    this.group.position.y=this.isBoss?0:Math.sin(this.age*6)*.035;
+    if(this.data.wallClimber&&this.updateWallClimb(dt,game))return;
+    if(this.kind==='burrower'&&this.updateBurrower(dt,game))return;
+    this.group.position.y=this.isBoss?0:this.data.flyer?(this.attackType==='dive'?this.group.position.y:3.2+Math.sin(this.age*4)*.28):Math.sin(this.age*6)*.035;
     if(this.flash>0)this.body.material.emissive.setHex(0x5a2e19);else this.body.material.emissive.setHex(0x000000);
     if(this.isBoss){this.updateBoss(dt,game);return;}
     if(this.windup>0){this.updateAttack(dt,game);return;}
@@ -116,6 +133,7 @@ export class Enemy {
     const player=game.player,target=game.getEnemyTarget?.(this)||player.position;const dx=target.x-this.group.position.x,dz=target.z-this.group.position.z,dist=Math.hypot(dx,dz);
     const forward=new THREE.Vector3(dx,0,dz).normalize();
     if(dist>.01)this.group.rotation.y=Math.atan2(forward.x,forward.z);
+    if(this.data.flyer){this.updateFlyer(dt,game,dist,forward);return;}
     if(this.kind==='rupture'){
       if(this.attackCooldown<=0&&dist>4.5&&dist<12){this.beginAttack('charge',.95,6.5,game);return;}
       if(dist>2.4)this.moveAlongPath(dt,game,forward,dist,3.1);
@@ -142,6 +160,76 @@ export class Enemy {
     else if(this.attackCooldown<=0)this.beginAttack('bite',.55,1.7,game);
   }
 
+  updateWallClimb(dt,game){
+    this.wallCooldown-=dt;
+    if(this.wallMode==='ground'){
+      if(this.recover>0)return false;
+      const target=game.getEnemyTarget(this),dist=Math.hypot(target.x-this.group.position.x,target.z-this.group.position.z);
+      const room=game.world.roomAt(this.group.position),playerRoom=game.world.roomAt(game.player.position);
+      if(room&&room===playerRoom&&dist>4.5&&this.wallCooldown<=0){
+        this.wallStart=this.group.position.clone();this.wallRoom=room;this.wallSide=this.rng()<.5?-1:1;
+        this.wallTarget={x:room.x+this.wallSide*(room.width/2-1.1),z:clamp(this.group.position.z,room.z-room.depth/2+2,room.z+room.depth/2-2)};
+        this.wallCeilingY=(room.ceilingY??7)-.15;this.wallTimer=.72;this.wallMode='wall';this.telegraph=game.addTelegraph('wallClimb',new THREE.Vector3(this.wallTarget.x,0,this.wallTarget.z),1.2,.72,this);game.audioCue('warning');return true;
+      }
+      return false;
+    }
+    if(this.wallMode==='wall'){
+      this.wallTimer-=dt;const t=1-clamp(this.wallTimer/.72,0,1);
+      this.group.position.x=this.wallStart.x+(this.wallTarget.x-this.wallStart.x)*t;this.group.position.z=this.wallStart.z+(this.wallTarget.z-this.wallStart.z)*t;this.group.position.y=.25+t*(this.wallCeilingY-.25);this.group.rotation.z=this.wallSide*Math.PI/2;
+      if(this.wallTimer<=0){this.wallMode='ceiling';this.wallTimer=2.5;this.group.position.y=this.wallCeilingY;this.group.rotation.z=0;this.group.rotation.x=Math.PI;}
+      return true;
+    }
+    if(this.wallMode==='ceiling'){
+      const room=this.wallRoom,target=game.getEnemyTarget(this);
+      const tx=clamp(target.x,room.x-room.width/2+1.4,room.x+room.width/2-1.4),tz=clamp(target.z,room.z-room.depth/2+1.4,room.z+room.depth/2-1.4);
+      const dx=tx-this.group.position.x,dz=tz-this.group.position.z,len=Math.hypot(dx,dz)||1,step=Math.min(len,4.4*dt);
+      this.group.position.x+=dx/len*step;this.group.position.z+=dz/len*step;this.group.position.y=this.wallCeilingY;this.group.rotation.x=Math.PI;
+      this.wallTimer-=dt;
+      if(Math.hypot(this.group.position.x-target.x,this.group.position.z-target.z)<3.7||this.wallTimer<=0){
+        this.wallMode='drop';this.wallTimer=.72;this.wallStart=this.group.position.clone();
+        const away=new THREE.Vector3(this.group.position.x-target.x,0,this.group.position.z-target.z).normalize();
+        this.dropTarget={x:clamp(target.x+away.x*2.1,room.x-room.width/2+1.5,room.x+room.width/2-1.5),z:clamp(target.z+away.z*2.1,room.z-room.depth/2+1.5,room.z+room.depth/2-1.5)};
+        if(this.telegraph)game.removeTelegraph(this.telegraph);this.telegraph=game.addTelegraph('wallDrop',new THREE.Vector3(this.dropTarget.x,0,this.dropTarget.z),1.8,.72,this);
+      }
+      return true;
+    }
+    if(this.wallMode==='drop'){
+      this.wallTimer-=dt;const t=1-clamp(this.wallTimer/.72,0,1);
+      this.group.position.x=this.wallStart.x+(this.dropTarget.x-this.wallStart.x)*t;this.group.position.z=this.wallStart.z+(this.dropTarget.z-this.wallStart.z)*t;this.group.position.y=this.wallCeilingY*(1-t);this.group.rotation.x=Math.PI*(1-t);
+      if(this.wallTimer<=0){this.group.position.y=0;this.group.rotation.x=0;const d=Math.hypot(this.group.position.x-game.player.position.x,this.group.position.z-game.player.position.z);if(d<3.2)game.damagePlayer(16,this.group.position,'攀行虫扑落');this.wallMode='ground';this.wallCooldown=7;this.recover=.75;if(this.telegraph)game.removeTelegraph(this.telegraph);this.telegraph=null;}
+      return true;
+    }
+    return false;
+  }
+
+  updateBurrower(dt,game){
+    if(this.burrowMode==='underground'){
+      this.burrowTimer-=dt;this.group.visible=false;
+      if(this.burrowTimer<=0){this.group.position.set(this.burrowTarget.x,0,this.burrowTarget.z);this.group.visible=true;const d=Math.hypot(game.player.position.x-this.group.position.x,game.player.position.z-this.group.position.z);if(d<3.2)game.damagePlayer(this.data.damage,this.group.position,'泥潜伏击');this.burrowMode='surface';this.recover=.85;this.attackCooldown=this.data.attack;if(this.telegraph)game.removeTelegraph(this.telegraph);this.telegraph=null;}
+      return true;
+    }
+    this.group.visible=true;this.group.position.y=0;
+    if(this.recover>0)return false;
+    const target=game.getEnemyTarget(this),dist=Math.hypot(target.x-this.group.position.x,target.z-this.group.position.z),room=game.world.roomAt(this.group.position),playerRoom=game.world.roomAt(game.player.position);
+    if(dist>3&&dist<14&&this.attackCooldown<=0&&room===playerRoom){
+      const away=new THREE.Vector3(this.group.position.x-target.x,0,this.group.position.z-target.z).normalize();
+      this.burrowTarget={x:clamp(target.x+away.x*2.2,room.x-room.width/2+1.4,room.x+room.width/2-1.4),z:clamp(target.z+away.z*2.2,room.z-room.depth/2+1.4,room.z+room.depth/2-1.4)};
+      this.burrowTimer=1.2;this.burrowMode='underground';this.group.visible=false;this.telegraph=game.addTelegraph('burrow',new THREE.Vector3(this.burrowTarget.x,0,this.burrowTarget.z),1.6,1.2,this);this.attackCooldown=this.data.attack;game.audioCue('warning');return true;
+    }
+    return false;
+  }
+
+  updateFlyer(dt,game,dist,forward){
+    if(this.windup>0)return;
+    const p=game.player.position,side=new THREE.Vector3(-forward.z,0,forward.x);let move;
+    if(dist>12)move=forward;
+    else if(dist<6)move=forward.clone().multiplyScalar(-1).addScaledVector(side,.35).normalize();
+    else move=side;
+    const candidate=new THREE.Vector3(this.group.position.x+move.x*this.data.speed*dt,this.group.position.y,this.group.position.z+move.z*this.data.speed*dt);
+    if(game.world.canMove(candidate,.4,1.3))this.group.position.copy(candidate);
+    if(this.attackCooldown<=0&&dist<15){this.beginAttack('dive',.9,3.6,game);}
+  }
+
   moveAlongPath(dt,game,direction,distance,speed){
     const pos=this.group.position;
     let target=game.getEnemyTarget?.(this)||game.player.position;
@@ -154,10 +242,10 @@ export class Enemy {
     const dx=target.x-pos.x,dz=target.z-pos.z,len=Math.hypot(dx,dz)||1;
     const dir=new THREE.Vector3(dx/len,0,dz/len);
     const step=speed*(game.enemySlowFactor?.(pos)??1)*dt*Math.sign(distance||1);
-    const candidate=new THREE.Vector3(pos.x+dir.x*step,0,pos.z+dir.z*step);
+    const candidate=new THREE.Vector3(pos.x+dir.x*step,pos.y,pos.z+dir.z*step);
     if(game.world.canMove(candidate,.45,1.8))pos.set(candidate.x,pos.y,candidate.z);
     else{
-      const slide=new THREE.Vector3(pos.x-dir.z*step,0,pos.z+dir.x*step);
+      const slide=new THREE.Vector3(pos.x-dir.z*step,pos.y,pos.z+dir.x*step);
       if(game.world.canMove(slide,.45,1.8))pos.set(slide.x,pos.y,slide.z);
     }
   }
@@ -170,6 +258,8 @@ export class Enemy {
   updateAttack(dt,game){
     this.windup-=dt;
     if(this.attackType==='charge'&&this.windup<.15){const d=new THREE.Vector3(game.player.position.x-this.group.position.x,0,game.player.position.z-this.group.position.z).normalize();this.group.position.addScaledVector(d,5.4*dt);}
+    if(this.attackType==='burrowDive'&&this.windup<.55){this.group.visible=false;}
+    if(this.attackType==='dive'&&this.windup>0){this.group.position.y=Math.max(.25,this.group.position.y-3.4*dt);}
     if(this.windup>0)return;
     const p=game.player.position,dx=p.x-this.group.position.x,dz=p.z-this.group.position.z,dist=Math.hypot(dx,dz);
     const forward=new THREE.Vector3(Math.sin(this.group.rotation.y),0,Math.cos(this.group.rotation.y));
@@ -180,6 +270,10 @@ export class Enemy {
     if(this.attackType==='charge'){
       if(dist<2.4)game.damagePlayer(30,this.group.position,'破岩冲锋');
       this.recover=1.1;this.weakOpen=true;this.weakCloseTimer=1.1;this.sacMesh.material.emissiveIntensity=.95;
+    }
+    if(this.attackType==='dive'){if(dist<3.3)game.damagePlayer(this.data.damage,this.group.position,'掠翼俯冲');this.group.position.y=3.2;this.recover=.55;}
+    if(this.attackType==='burrowDive'){
+      this.group.visible=true;this.group.position.set(this.burrowTarget.x,0,this.burrowTarget.z);const d=Math.hypot(game.player.position.x-this.group.position.x,game.player.position.z-this.group.position.z);if(d<3.2)game.damagePlayer(this.data.damage,this.group.position,'泥潜伏击');this.recover=.85;
     }
     if(this.attackType==='acid')game.spawnProjectile(this,'acid',this.data.damage,10);
     if(this.attackType==='shard')game.spawnProjectile(this,'shard',this.data.damage,16,3);
