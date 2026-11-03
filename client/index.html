@@ -6,6 +6,7 @@
   <meta name="theme-color" content="#101515" />
   <title>掘地潜兵 | 远征原型</title>
   <link rel="stylesheet" href="/src/style.css" />
+  <link rel="stylesheet" href="/src/mission-preview.css" />
 </head>
 <body>
   <main id="app">
@@ -62,14 +63,22 @@
     <div class="aim-state" id="aimState"><i></i><span>待命</span></div>
     <div class="interact-prompt" id="interactPrompt" hidden><kbd>E</kbd><span id="interactText">交互</span></div>
     <div class="hold-progress" id="holdProgress" hidden><div><span id="holdLabel">正在操作</span><b id="holdPercent">0%</b></div><i><b id="holdFill"></b></i></div>
+    <section class="mission-preview" id="missionPreview" hidden>
+      <div class="preview-kicker"><span></span><b>远征任务简报</b><small id="previewState">待接取</small></div>
+      <h3>随机矿洞 · 资源回收</h3>
+      <p>每局生成不同的 6–10 房间网络，路线与封堵状态随机。</p>
+      <div class="preview-stats"><div><small>资源总量</small><b>晶矿 <span id="previewCrystalTotal">300</span> <i>·</i> 硝石 <span id="previewNitraTotal">240</span></b></div><div><small>主目标</small><b>交存晶矿 200</b></div><div><small>撤离船</small><b>目标完成自动返航 <i>·</i> 最晚 10:00</b></div></div>
+      <div class="preview-enemies"><small>可能遭遇 · 每局 3 普通 + 2 精英 + 固定 Boss</small><div id="previewEnemyTags"></div></div>
+      <div class="preview-footer"><span id="previewPlanLabel">接取后随机抽取 1 套</span><span>单人演习</span></div>
+    </section>
     <div class="floating-layer" id="floatingLayer"></div>
     <div class="toast" id="toast"></div>
 
     <footer class="bottom-hud hud">
       <div class="loadout-card">
         <div class="gear-badge" id="gearBadge">MG</div>
-        <div class="gear-main"><small id="gearSlot">主武器 · 1</small><b id="gearName">多管机枪</b><div class="ammo-line"><strong id="ammoValue">420</strong><span>/</span><span id="magValue">80</span><div class="heat-meter"><i id="heatFill"></i></div></div></div>
-        <div class="slot-hints"><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd><kbd>4</kbd><kbd>5</kbd></div>
+        <div class="gear-main"><small id="gearSlot">主武器 · 1</small><b id="gearName">多管机枪</b><div class="ammo-line"><strong id="ammoValue">420</strong><span id="ammoSeparator">/</span><span id="magValue">80</span><div class="heat-meter"><i id="heatFill"></i></div></div></div>
+        <div class="slot-hints"><span class="grenade-count"><kbd>G</kbd><b id="grenadeValue">4</b></span><kbd data-slot="0">1</kbd><kbd data-slot="1">2</kbd><kbd data-slot="2">3</kbd><kbd data-slot="3">4</kbd><kbd data-slot="4">5</kbd></div>
       </div>
       <div class="control-ribbon"><span><kbd>W A S D</kbd>移动</span><span><kbd>鼠标</kbd>瞄准</span><span><kbd>左键</kbd>射击/挖掘</span><span><kbd>E</kbd>交互</span><span><kbd>F</kbd>照明</span><span><kbd>G</kbd>投掷</span><span><kbd>Esc</kbd>释放鼠标</span></div>
       <div class="clock-card"><small id="clockLabel">远征计时</small><b id="clockValue">00:00</b><span id="clockSub">PLAN RETURN 10:00</span></div>
@@ -92,6 +101,10 @@
 
     <div class="overlay compact-overlay" id="helpOverlay" hidden>
       <section class="help-panel"><button class="close-button" id="closeHelpButton">×</button><div class="eyebrow">FIELD MANUAL</div><h2>操作说明</h2><div class="help-grid"><div><kbd>W A S D</kbd><span>相机相对移动</span></div><div><kbd>鼠标移动</kbd><span>越肩环视与瞄准</span></div><div><kbd>左键</kbd><span>射击 / 持续挖掘</span></div><div><kbd>E</kbd><span>附近设备交互 / 交存</span></div><div><kbd>1–5</kbd><span>切换装备</span></div><div><kbd>F / G</kbd><span>照明 / 投掷物</span></div><div><kbd>Space</kbd><span>跳跃</span></div><div><kbd>Esc</kbd><span>释放鼠标</span></div></div><p>交存 200 晶矿后返航会自动启动；撤离船抵达后，玩家返回船边即可进入登舱等待。全体玩家登舱后飞船自动起飞。若未提前完成，撤离船于任务时间 10:00 计划返场。</p><button class="secondary-button" id="resumeButton">返回游戏</button></section>
+    </div>
+
+    <div class="cinematic-overlay" id="cinematicOverlay" aria-hidden="true">
+      <div class="cinematic-frame"><span id="cinematicKicker">DROP SEQUENCE</span><b id="cinematicTitle">舱门闭锁</b><i id="cinematicSubtitle">飞船正在准备发射</i><div class="cinematic-progress"><span id="cinematicProgress"></span></div></div>
     </div>
 
     <div class="pause-indicator" id="pauseIndicator" hidden><b>已释放鼠标</b><span>点击画面继续瞄准 · Esc 打开/关闭操作说明</span></div>
