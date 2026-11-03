@@ -11,7 +11,7 @@ pnpm install
 pnpm build:windows
 ```
 
-生成的 Windows x64 单文件程序位于 `dist/DeepTroopers-0.1.1-Windows-Portable.exe`。复制该文件到另一台 Windows 电脑后双击即可运行；游戏资源已内置，不需要另开浏览器、启动服务器或保持网络连接。
+生成的 Windows x64 单文件程序位于 `dist/DeepTroopers-0.1.2-Windows-Portable.exe`。复制该文件到另一台 Windows 电脑后双击即可运行；游戏资源已内置，不需要另开浏览器、启动服务器或保持网络连接。
 
 ## 启动
 
