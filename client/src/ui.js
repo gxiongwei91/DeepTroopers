@@ -28,6 +28,8 @@ export class HUD {
   }
   setClass(classId){const data=CLASS_DATA[classId];this.el.classHud.textContent=data.name;}
   setPrompt(text,visible=true,key='E'){this.el.interactPrompt.hidden=!visible;this.el.interactPrompt.querySelector('kbd').textContent=key;this.el.interactText.textContent=text;}
+  setPauseStatus(lockFailed=false){this.el.pauseIndicator.querySelector('b').textContent=lockFailed?'鼠标未捕获':'已释放鼠标';this.el.pauseIndicator.querySelector('span').textContent=lockFailed?'点击画面重新捕获准星 · Esc 打开操作说明':'点击画面捕获准星 · Esc 打开/关闭操作说明';}
+  setAimMode(text){this.el.aimState.querySelector('span').textContent=text;}
   setMissionPreview(visible,point,accepted=false,plan=null,resources=null){
     const panel=this.el.missionPreview;if(!panel)return;panel.hidden=!visible;if(!visible)return;
     this.el.previewState.textContent=accepted?'已接取':'待接取';

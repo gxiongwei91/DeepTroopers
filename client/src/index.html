@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <meta name="theme-color" content="#101515" />
+  <title>掘地潜兵 | 远征原型</title>
+  <link rel="stylesheet" href="/src/style.css" />
+  <link rel="stylesheet" href="/src/mission-preview.css" />
+</head>
+<body>
+  <main id="app">
+    <canvas id="scene" aria-label="TPS 越肩视角游戏画面"></canvas>
+    <div class="vignette"></div>
+    <div class="scanlines"></div>
+
+    <header class="top-hud hud">
+      <div class="brand-lockup"><div class="brand-icon">DT</div><div><b>DEEP TROOPERS</b><small>远征战区 · 沙盒演习</small></div></div>
+      <div class="mission-chip"><span class="live-indicator"></span><div><small>行动阶段</small><b id="stageText">基地整备</b></div></div>
+      <div class="mission-chip objective-chip"><div><small>主目标 · 晶矿交存</small><b><span id="objectiveValue">0</span><i>/ 200</i></b></div><div class="objective-track"><span id="objectiveFill"></span></div></div>
+      <button class="square-button" id="helpButton" title="操作说明">?</button>
+    </header>
+
+    <aside class="left-hud hud">
+      <section class="hud-card vitals-card">
+        <div class="card-heading"><span>战斗状态</span><b id="classHud">枪手</b></div>
+        <div class="stat-line"><span class="stat-icon health-icon">+</span><div class="meter"><i id="healthFill" class="health-meter"></i></div><b id="healthValue">100</b></div>
+        <div class="stat-line"><span class="stat-icon shield-icon">⬡</span><div class="meter"><i id="shieldFill" class="shield-meter"></i></div><b id="shieldValue">50</b></div>
+      </section>
+      <section class="hud-card cargo-card" id="cargoCard" hidden>
+        <div class="card-heading"><span>个人背包</span><small>自动拾取</small></div>
+        <div class="cargo-row"><span class="ore-dot crystal"></span><span>晶矿</span><b id="crystalCarried">0</b><small>/ 40</small><em>交存 <strong id="crystalDeposited">0</strong></em></div>
+        <div class="cargo-row"><span class="ore-dot nitra"></span><span>硝石</span><b id="nitraCarried">0</b><small>/ 40</small><em>库存 <strong id="nitraBank">0</strong></em></div>
+      </section>
+      <section class="hud-card phase-card" id="phaseCard">
+        <div class="card-heading"><span id="phaseEyebrow">基地简报</span><span class="phase-mark"></span></div>
+        <b id="phaseTitle">准备出发</b>
+        <p id="phaseDescription">选择职业，在任务简报台接取远征任务。</p>
+        <div class="phase-foot"><span id="phaseStatus">行动待命</span><b id="phaseStatusValue">未接单</b></div>
+      </section>
+    </aside>
+
+    <aside class="right-hud hud">
+      <section class="hud-card threat-card" id="threatCard" hidden>
+        <div class="threat-heading"><span class="threat-pulse"></span><div><small>虫潮强度</small><b id="waveLabel">首波预警</b></div><strong id="enemyCount">0</strong></div>
+        <div class="threat-meter"><i id="threatFill"></i></div>
+        <div class="threat-foot"><span id="wavePlanLabel">编排载入中</span><span id="nextWaveText">下一波 --:--</span></div>
+      </section>
+      <section class="hud-card boss-card" id="bossCard" hidden>
+        <div class="boss-label"><span></span><b>深渊母巢 · 渊脊母虫</b><small id="bossPhase">PHASE I</small></div>
+        <div class="boss-meter"><i id="bossFill"></i></div>
+        <div class="boss-foot"><span id="bossWeakpointText">等待弱点暴露</span><b id="bossHealthText">--</b></div>
+      </section>
+      <section class="hud-card map-card" id="mapCard">
+        <div class="card-heading"><span>局部扫描</span><b id="roomLabel">基地</b></div>
+        <canvas id="minimap" width="160" height="120"></canvas>
+        <div class="map-legend"><span><i class="legend-player"></i>我</span><span><i class="legend-destination"></i>目标</span><span><i class="legend-enemy"></i>威胁</span></div>
+      </section>
+    </aside>
+
+    <div class="reticle" id="reticle"><i class="reticle-top"></i><i class="reticle-right"></i><i class="reticle-bottom"></i><i class="reticle-left"></i><b></b></div>
+    <div class="hit-confirm" id="hitConfirm">×</div>
+    <div class="aim-state" id="aimState"><i></i><span>待命</span></div>
+    <div class="interact-prompt" id="interactPrompt" hidden><kbd>E</kbd><span id="interactText">交互</span></div>
+    <div class="hold-progress" id="holdProgress" hidden><div><span id="holdLabel">正在操作</span><b id="holdPercent">0%</b></div><i><b id="holdFill"></b></i></div>
+    <section class="mission-preview" id="missionPreview" hidden>
+      <div class="preview-kicker"><span></span><b>远征任务简报</b><small id="previewState">待接取</small></div>
+      <h3>随机矿洞 · 资源回收</h3>
+      <p>每局生成不同的 6–10 房间网络，路线与封堵状态随机。</p>
+      <div class="preview-stats"><div><small>资源总量</small><b>晶矿 <span id="previewCrystalTotal">300</span> <i>·</i> 硝石 <span id="previewNitraTotal">240</span></b></div><div><small>主目标</small><b>交存晶矿 200</b></div><div><small>撤离船</small><b>目标完成自动返航 <i>·</i> 最晚 10:00</b></div></div>
+      <div class="preview-enemies"><small>可能遭遇 · 每局 3 普通 + 2 精英 + 固定 Boss</small><div id="previewEnemyTags"></div></div>
+      <div class="preview-footer"><span id="previewPlanLabel">接取后随机抽取 1 套</span><span>单人演习</span></div>
+    </section>
+    <div class="floating-layer" id="floatingLayer"></div>
+    <div class="toast" id="toast"></div>
+
+    <footer class="bottom-hud hud">
+      <div class="loadout-card">
+        <div class="gear-badge" id="gearBadge">MG</div>
+        <div class="gear-main"><small id="gearSlot">主武器 · 1</small><b id="gearName">多管机枪</b><div class="ammo-line"><strong id="ammoValue">420</strong><span id="ammoSeparator">/</span><span id="magValue">80</span><div class="heat-meter"><i id="heatFill"></i></div></div></div>
+        <div class="slot-hints"><span class="grenade-count"><kbd>G</kbd><b id="grenadeValue">4</b></span><kbd data-slot="0">1</kbd><kbd data-slot="1">2</kbd><kbd data-slot="2">3</kbd><kbd data-slot="3">4</kbd><kbd data-slot="4">5</kbd></div>
+      </div>
+      <div class="control-ribbon"><span><kbd>W A S D</kbd>移动</span><span><kbd>鼠标</kbd>瞄准</span><span><kbd>左键</kbd>射击/挖掘</span><span><kbd>E</kbd>交互</span><span><kbd>F</kbd>照明</span><span><kbd>G</kbd>投掷</span><span><kbd>Esc</kbd>释放鼠标</span></div>
+      <div class="clock-card"><small id="clockLabel">远征计时</small><b id="clockValue">00:00</b><span id="clockSub">PLAN RETURN 10:00</span></div>
+    </footer>
+
+    <div class="overlay" id="welcomeOverlay">
+      <section class="welcome-panel">
+        <div class="eyebrow"><i></i> LOCAL EXPEDITION SIMULATOR <span>BUILD 0.1.1</span></div>
+        <h1>深入地底，<br /><em>带着矿物回来。</em></h1>
+        <p>四职业单人远征演习。每次任务都会重新生成房间网络，交存晶矿并在虫潮中返回撤离船。</p>
+        <div class="welcome-stats"><div><small>房间</small><b>06–10 <i>随机网络</i></b></div><div><small>主目标</small><b>200 <i>晶矿</i></b></div><div><small>撤离船</small><b>10:00 <i>计划返场</i></b></div></div>
+        <button class="primary-button" id="enterBaseButton"><span>进入基地</span><b>→</b></button>
+        <small class="welcome-note">TPS 越肩视角 · 鼠标与键盘操作 · 单人白盒原型</small>
+      </section>
+    </div>
+
+    <div class="overlay" id="resultOverlay" hidden>
+      <section class="result-panel"><div class="result-stamp" id="resultStamp">MISSION COMPLETE</div><div class="eyebrow">远征结算</div><h2 id="resultTitle">成功撤离</h2><p id="resultDescription">全体登舱，飞船正在返航。</p><div class="result-grid"><div><small>晶矿交存</small><b id="resultOre">0 / 200</b></div><div><small>击杀虫群</small><b id="resultKills">0</b></div><div><small>波次方案</small><b id="resultPlan">--</b></div><div><small>任务时间</small><b id="resultTime">00:00</b></div></div><button class="primary-button" id="returnBaseButton"><span>返回基地</span><b>→</b></button></section>
+    </div>
+
+    <div class="overlay compact-overlay" id="helpOverlay" hidden>
+      <section class="help-panel"><button class="close-button" id="closeHelpButton">×</button><div class="eyebrow">FIELD MANUAL</div><h2>操作说明</h2><div class="help-grid"><div><kbd>W A S D</kbd><span>相机相对移动</span></div><div><kbd>鼠标移动</kbd><span>转动越肩镜头，中心准星瞄准</span></div><div><kbd>左键</kbd><span>射击 / 持续挖掘</span></div><div><kbd>E</kbd><span>附近设备交互 / 交存</span></div><div><kbd>1–5</kbd><span>切换装备</span></div><div><kbd>F / G</kbd><span>照明 / 投掷物</span></div><div><kbd>Space</kbd><span>跳跃</span></div><div><kbd>Esc</kbd><span>释放鼠标</span></div></div><p>进入游戏后点击画面捕获鼠标，准星保持在屏幕中心。交存 200 晶矿后返航会自动启动；撤离船抵达后，玩家返回船边即可进入登舱等待。全体玩家登舱后飞船自动起飞。若未提前完成，撤离船于任务时间 10:00 计划返场。</p><button class="secondary-button" id="resumeButton">返回游戏</button></section>
+    </div>
+
+    <div class="cinematic-overlay" id="cinematicOverlay" aria-hidden="true">
+      <div class="cinematic-frame"><span id="cinematicKicker">DROP SEQUENCE</span><b id="cinematicTitle">舱门闭锁</b><i id="cinematicSubtitle">飞船正在准备发射</i><div class="cinematic-progress"><span id="cinematicProgress"></span></div></div>
+    </div>
+
+    <div class="pause-indicator" id="pauseIndicator" hidden><b>已释放鼠标</b><span>点击画面捕获准星 · Esc 打开/关闭操作说明</span></div>
+  </main>
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>

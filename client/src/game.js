@@ -24,7 +24,7 @@ export class Game {
     this.enemies=[];this.projectiles=[];this.throwables=[];this.telegraphs=[];this.acidPatches=[];this.sentries=[];this.platforms=[];this.ziplines=[];this.flareLights=[];this.shieldBubbles=[];this.satchels=[];this.ifgFields=[];this.lures=[];this.spawnQueue=[];this.pendingSpawnTimer=0;
     this.boss=null;this.bossSpawned=false;this.shipArrived=false;this.shipArrivedAt=0;this.returnAt=null;this.returnEarly=false;this.shipDoorOpen=false;this.playerBoarded=false;
     this.deposited={crystal:0,nitra:0};this.teamNitra=0;this.totalKills=0;this.damageTaken=0;this.interactTarget=null;this.depositAccumulator=0;this.reloadTimer=0;this.weaponCooldown=0;this.weaponHeat=0;this.flameHeat=0;this.overheatedUntil=0;this.lightCooldown=0;this.actionCooldown={};
-    this.keys=new Set();this.mouseDown=false;this.eHeld=false;this.pointerActive=false;this.grapple=null;this.jumpVelocity=0;this.playerSpeed=6.6;this.cameraYaw=0;this.cameraPitch=.22;this.cameraDistance=5.6;this.cameraLookAt=new THREE.Vector3();this.cameraPosition=new THREE.Vector3();this.elapsedAccumulator=0;
+    this.keys=new Set();this.mouseDown=false;this.eHeld=false;this.pointerActive=false;this.pointerRequestPending=false;this.grapple=null;this.jumpVelocity=0;this.playerSpeed=6.6;this.cameraYaw=0;this.cameraPitch=.22;this.cameraDistance=5.6;this.cameraLookAt=new THREE.Vector3();this.cameraPosition=new THREE.Vector3();this.elapsedAccumulator=0;
     this.previousMouseDown=false;this.activeSupplyPack=null;this.supplyHold=0;this.ifgFields=[];this.lures=[];this.ziplineRide=null;this.platforms=[];this.introWake=false;this.previewPlan=null;
     this.player=this.createPlayer('gunner');this.player.position.set(0,0,-6);this.player.group.position.copy(this.player.position);this.scene.add(this.player.group);this.world.markVisited?.(null);
     this.bindInput();this.bindHUD();window.addEventListener('resize',()=>this.resize());
@@ -74,11 +74,12 @@ export class Game {
       if(e.code==='Escape'&&this.started){if(document.pointerLockElement)document.exitPointerLock();else if(this.hud.el.helpOverlay.hidden)this.hud.openHelp();else this.hud.closeHelp();}
     });
     window.addEventListener('keyup',e=>{this.keys.delete(e.code);if(e.code==='KeyE')this.endInteract();});
-    this.canvas.addEventListener('mousedown',e=>{if(e.button===0){if(!document.pointerLockElement&&!this.hud.el.helpOverlay.hidden)return;this.requestPointer();this.mouseDown=true;}});
+    this.canvas.addEventListener('mousedown',e=>{if(e.button!==0||!this.started||!this.hud.el.helpOverlay.hidden)return;if(!document.pointerLockElement){this.mouseDown=false;return;}this.mouseDown=true;});
     window.addEventListener('mouseup',e=>{if(e.button===0)this.mouseDown=false;});
     this.canvas.addEventListener('click',()=>{if(this.started&&!document.pointerLockElement&&!this.hud.el.helpOverlay.hidden)this.requestPointer();});
-    window.addEventListener('mousemove',e=>{if(!document.pointerLockElement||!this.started)return;this.cameraYaw-=e.movementX*.0026;this.cameraPitch=clamp(this.cameraPitch-e.movementY*.0018,-.26,.72);});
-    document.addEventListener('pointerlockchange',()=>{this.pointerActive=Boolean(document.pointerLockElement);this.hud.setPauseVisible(this.started&&!this.pointerActive&&!this.hud.el.helpOverlay.hidden&&!this.hud.el.resultOverlay.hidden);});
+    window.addEventListener('mousemove',e=>{if(!this.started||!document.pointerLockElement||this.stage==='cinematic')return;this.rotateCamera(e.movementX,e.movementY);});
+    document.addEventListener('pointerlockchange',()=>{this.pointerActive=document.pointerLockElement===this.canvas;this.pointerRequestPending=false;this.mouseDown=false;const waitingForAim=this.started&&!this.pointerActive&&this.hud.el.helpOverlay.hidden&&this.hud.el.resultOverlay.hidden&&this.stage!=='cinematic';this.hud.setPauseVisible(waitingForAim);this.hud.setPauseStatus(false);this.hud.setAimMode(this.pointerActive?'中心准星锁定':'点击画面捕获鼠标');});
+    document.addEventListener('pointerlockerror',()=>this.handlePointerLockFailure());
     this.canvas.addEventListener('wheel',e=>{if(!this.started)return;e.preventDefault();this.selectSlot((this.player.selectedSlot+(e.deltaY>0?1:4))%5);},{passive:false});
     window.addEventListener('hud:enterBase',()=>{this.started=true;this.requestPointer();this.hud.setPauseVisible(false);this.hud.toast('基地整备完成 · 选择职业并接取任务');});
     window.addEventListener('hud:releasePointer',()=>{if(document.pointerLockElement)document.exitPointerLock();});
@@ -90,7 +91,23 @@ export class Game {
     const btn=this.hud.el.helpButton;btn.addEventListener('click',()=>{if(document.pointerLockElement)document.exitPointerLock();});
   }
 
-  requestPointer(){if(this.started&&!this.hud.el.helpOverlay.hidden&&!this.hud.el.resultOverlay.hidden)this.canvas.requestPointerLock?.();}
+  requestPointer(){
+    if(!this.started||!this.hud.el.helpOverlay.hidden||!this.hud.el.resultOverlay.hidden||document.pointerLockElement===this.canvas||this.pointerRequestPending)return;
+    if(typeof this.canvas.requestPointerLock!=='function'){this.handlePointerLockFailure();return;}
+    this.pointerRequestPending=true;
+    try{
+      const result=this.canvas.requestPointerLock();
+      if(result&&typeof result.then==='function')result.catch(()=>this.handlePointerLockFailure());
+      else setTimeout(()=>{if(!document.pointerLockElement&&this.pointerRequestPending)this.handlePointerLockFailure();},250);
+    }catch{this.handlePointerLockFailure();}
+  }
+  handlePointerLockFailure(){
+    this.pointerRequestPending=false;this.pointerActive=false;this.mouseDown=false;
+    const canRetry=this.started&&this.hud.el.helpOverlay.hidden&&this.hud.el.resultOverlay.hidden&&this.stage!=='cinematic';
+    this.hud.setPauseVisible(canRetry);this.hud.setPauseStatus(true);this.hud.setAimMode('鼠标捕获失败');
+    if(canRetry)this.hud.toast('鼠标捕获失败 · 点击游戏画面重试','warning');
+  }
+  rotateCamera(dx,dy){this.cameraYaw-=dx*.0026;this.cameraPitch=clamp(this.cameraPitch-dy*.0018,-.26,.72);}
   resize(){this.renderer.setSize(window.innerWidth,window.innerHeight,false);this.camera.aspect=window.innerWidth/window.innerHeight;this.camera.updateProjectionMatrix();this.renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,1.65));}
 
   enterMission(){
