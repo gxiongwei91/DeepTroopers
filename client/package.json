@@ -3,7 +3,39 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "main": "electron/main.cjs",
   "scripts": {
-    "start": "node server.mjs"
+    "start": "node server.mjs",
+    "desktop": "electron .",
+    "build:windows": "electron-builder --win portable --x64"
+  },
+  "devDependencies": {
+    "electron": "45.2.1",
+    "electron-builder": "26.18.0"
+  },
+  "build": {
+    "appId": "com.gxiongwei91.deeptroopers",
+    "productName": "DeepTroopers",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "electron/**/*",
+      "src/**/*",
+      "vendor/**/*",
+      "index.html",
+      "package.json",
+      "!dist/**/*"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "portable",
+          "arch": ["x64"]
+        }
+      ],
+      "signAndEditExecutable": false,
+      "artifactName": "DeepTroopers-${version}-Windows-Portable.${ext}"
+    }
   }
 }

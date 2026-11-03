@@ -2,6 +2,17 @@
 
 浏览器本地运行的第三人称越肩演示。此目录自带 Three.js r180 ES module，不需安装依赖或联网；授权文本见 `vendor/THREE-LICENSE.txt`。
 
+## Windows 便携版
+
+需要安装 Node.js 与 pnpm；在此目录运行：
+
+```powershell
+pnpm install
+pnpm build:windows
+```
+
+生成的 Windows x64 单文件程序位于 `dist/DeepTroopers-0.1.0-Windows-Portable.exe`。复制该文件到另一台 Windows 电脑后双击即可运行；游戏资源已内置，不需要另开浏览器、启动服务器或保持网络连接。
+
 ## 启动
 
 在此目录运行：
