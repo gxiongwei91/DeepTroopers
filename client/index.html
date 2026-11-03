@@ -86,7 +86,7 @@
 
     <div class="overlay" id="welcomeOverlay">
       <section class="welcome-panel">
-        <div class="eyebrow"><i></i> LOCAL EXPEDITION SIMULATOR <span>BUILD 0.1</span></div>
+        <div class="eyebrow"><i></i> LOCAL EXPEDITION SIMULATOR <span>BUILD 0.1.1</span></div>
         <h1>深入地底，<br /><em>带着矿物回来。</em></h1>
         <p>四职业单人远征演习。每次任务都会重新生成房间网络，交存晶矿并在虫潮中返回撤离船。</p>
         <div class="welcome-stats"><div><small>房间</small><b>06–10 <i>随机网络</i></b></div><div><small>主目标</small><b>200 <i>晶矿</i></b></div><div><small>撤离船</small><b>10:00 <i>计划返场</i></b></div></div>
@@ -100,14 +100,14 @@
     </div>
 
     <div class="overlay compact-overlay" id="helpOverlay" hidden>
-      <section class="help-panel"><button class="close-button" id="closeHelpButton">×</button><div class="eyebrow">FIELD MANUAL</div><h2>操作说明</h2><div class="help-grid"><div><kbd>W A S D</kbd><span>相机相对移动</span></div><div><kbd>鼠标移动</kbd><span>越肩环视与瞄准</span></div><div><kbd>左键</kbd><span>射击 / 持续挖掘</span></div><div><kbd>E</kbd><span>附近设备交互 / 交存</span></div><div><kbd>1–5</kbd><span>切换装备</span></div><div><kbd>F / G</kbd><span>照明 / 投掷物</span></div><div><kbd>Space</kbd><span>跳跃</span></div><div><kbd>Esc</kbd><span>释放鼠标</span></div></div><p>交存 200 晶矿后返航会自动启动；撤离船抵达后，玩家返回船边即可进入登舱等待。全体玩家登舱后飞船自动起飞。若未提前完成，撤离船于任务时间 10:00 计划返场。</p><button class="secondary-button" id="resumeButton">返回游戏</button></section>
+      <section class="help-panel"><button class="close-button" id="closeHelpButton">×</button><div class="eyebrow">FIELD MANUAL</div><h2>操作说明</h2><div class="help-grid"><div><kbd>W A S D</kbd><span>相机相对移动</span></div><div><kbd>鼠标移动</kbd><span>转动越肩镜头，中心准星瞄准</span></div><div><kbd>左键</kbd><span>射击 / 持续挖掘</span></div><div><kbd>E</kbd><span>附近设备交互 / 交存</span></div><div><kbd>1–5</kbd><span>切换装备</span></div><div><kbd>F / G</kbd><span>照明 / 投掷物</span></div><div><kbd>Space</kbd><span>跳跃</span></div><div><kbd>Esc</kbd><span>释放鼠标</span></div></div><p>进入游戏后点击画面捕获鼠标，准星保持在屏幕中心。交存 200 晶矿后返航会自动启动；撤离船抵达后，玩家返回船边即可进入登舱等待。全体玩家登舱后飞船自动起飞。若未提前完成，撤离船于任务时间 10:00 计划返场。</p><button class="secondary-button" id="resumeButton">返回游戏</button></section>
     </div>
 
     <div class="cinematic-overlay" id="cinematicOverlay" aria-hidden="true">
       <div class="cinematic-frame"><span id="cinematicKicker">DROP SEQUENCE</span><b id="cinematicTitle">舱门闭锁</b><i id="cinematicSubtitle">飞船正在准备发射</i><div class="cinematic-progress"><span id="cinematicProgress"></span></div></div>
     </div>
 
-    <div class="pause-indicator" id="pauseIndicator" hidden><b>已释放鼠标</b><span>点击画面继续瞄准 · Esc 打开/关闭操作说明</span></div>
+    <div class="pause-indicator" id="pauseIndicator" hidden><b>已释放鼠标</b><span>点击画面捕获准星 · Esc 打开/关闭操作说明</span></div>
   </main>
   <script type="module" src="/src/main.js"></script>
 </body>
