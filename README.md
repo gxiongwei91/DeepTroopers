@@ -2,7 +2,7 @@
 
 此仓库包含项目设计文档和可在本地浏览器运行的 TPS 越肩原型。
 
-Windows 玩家可从 [最新 GitHub Release](https://github.com/gxiongwei91/DeepTroopers/releases/latest) 下载 `DeepTroopers-Windows-Portable.exe`，双击直接游玩；该程序包含游戏运行所需的浏览器引擎和资源。若鼠标捕获不可用，在游戏画面内移动鼠标也可转动镜头。
+Windows 玩家可从 [最新 GitHub Release](https://github.com/gxiongwei91/DeepTroopers/releases/latest) 下载 `DeepTroopers-Windows-Portable.exe`，双击直接游玩；该程序包含游戏运行所需的浏览器引擎和资源。进入游戏后点击画面捕获鼠标，中心准星锁定瞄准方向；`Esc` 释放鼠标，点击画面重新捕获。
 
 ## 启动网页原型
 
