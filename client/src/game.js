@@ -74,7 +74,7 @@ export class Game {
       if(e.code==='Escape'&&this.started){if(document.pointerLockElement)document.exitPointerLock();else if(this.hud.el.helpOverlay.hidden)this.hud.openHelp();else this.hud.closeHelp();}
     });
     window.addEventListener('keyup',e=>{this.keys.delete(e.code);if(e.code==='KeyE')this.endInteract();});
-    this.canvas.addEventListener('mousedown',e=>{if(e.button!==0||!this.started||!this.hud.el.helpOverlay.hidden)return;if(!document.pointerLockElement){this.mouseDown=false;return;}this.mouseDown=true;});
+    this.canvas.addEventListener('mousedown',e=>{if(e.button!==0||!this.started||!this.hud.el.helpOverlay.hidden)return;if(!document.pointerLockElement){this.mouseDown=false;this.requestPointer();return;}this.mouseDown=true;});
     window.addEventListener('mouseup',e=>{if(e.button===0)this.mouseDown=false;});
     this.canvas.addEventListener('click',()=>{if(this.started&&!document.pointerLockElement&&!this.hud.el.helpOverlay.hidden)this.requestPointer();});
     window.addEventListener('mousemove',e=>{if(!this.started||!document.pointerLockElement||this.stage==='cinematic')return;this.rotateCamera(e.movementX,e.movementY);});
@@ -97,7 +97,7 @@ export class Game {
     this.pointerRequestPending=true;
     try{
       const result=this.canvas.requestPointerLock();
-      if(result&&typeof result.then==='function')result.catch(()=>this.handlePointerLockFailure());
+      if(result&&typeof result.then==='function')result.then(()=>setTimeout(()=>{if(this.pointerRequestPending&&!document.pointerLockElement)this.handlePointerLockFailure();},350),()=>this.handlePointerLockFailure());
       else setTimeout(()=>{if(!document.pointerLockElement&&this.pointerRequestPending)this.handlePointerLockFailure();},250);
     }catch{this.handlePointerLockFailure();}
   }
