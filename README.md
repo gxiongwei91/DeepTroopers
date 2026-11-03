@@ -2,6 +2,8 @@
 
 此仓库包含项目设计文档和可在本地浏览器运行的 TPS 越肩原型。
 
+Windows 玩家可从 GitHub Releases 下载 `DeepTroopers-0.1.0-Windows-Portable.exe`，双击直接游玩；该程序包含游戏运行所需的浏览器引擎和资源。
+
 ## 启动网页原型
 
 在 `client` 目录运行：
